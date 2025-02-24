@@ -1,0 +1,41 @@
+require("dotenv").config();
+const express = require("express");
+const cors = require("cors");
+const stripe = require("stripe")(backend.env.STRIPE_SECRET_KEY);
+const { Pool } = require("pg");
+
+const app = express();
+app.use(cors());
+app.use(express.json());
+
+const pool = new Pool({
+  connectionString: backend.env.DATABASE_URL,
+  ssl: { rejectUnauthorized: false },
+});
+
+// Get all products
+app.get("/products", async (req, res) => {
+  const result = await pool.query("SELECT * FROM products");
+  res.json(result.rows);
+});
+
+// Create Stripe checkout session
+app.post("/checkout", async (req, res) => {
+  const { items } = req.body;
+  const lineItems = items.map((item) => ({
+    price_data: { currency: "usd", product_data: { name: item.name }, unit_amount: item.price * 100 },
+    quantity: item.quantity,
+  }));
+
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ["card"],
+    line_items: lineItems,
+    mode: "payment",
+    success_url: "http://localhost:3000/success",
+    cancel_url: "http://localhost:3000/cancel",
+  });
+
+  res.json({ id: session.id });
+});
+
+app.listen(5000, () => console.log("Server running on port 5000"));
